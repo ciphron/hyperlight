@@ -9,7 +9,7 @@ include("includes/entry.class.php");
 
 // Parsedown is optional, it adds support for markdown blog posts, but also adds 40kb to the installation
 if (using_parsedown()) {
-	include("includes/parsedown.php");
+    include("includes/parsedown.php");
 }
 
 /*
@@ -23,25 +23,25 @@ $tag = "";
 $is_rss = not_blank('rss');
 
 function not_blank($var) {
-	return (isset($_GET[$var]) && $_GET[$var] !== "");
+    return (isset($_GET[$var]) && $_GET[$var] !== "");
 }
 
 // Requesting a blog post
 if (not_blank('post')) {
-	$post_slug = $_GET['post'];
+    $post_slug = $_GET['post'];
 
 // Requesting a page
 } else if (not_blank('page')) {
-	$page_slug = $_GET['page'];
+    $page_slug = $_GET['page'];
 
 // Show the archive with/without a tag
 } else {
-	if (not_blank('tag')) {
-		$tag = strtolower($_GET['tag']);
-	}
-	if (not_blank('pagination')) {
-		$pagination = $_GET['pagination'] - 1;
-	}
+    if (not_blank('tag')) {
+        $tag = strtolower($_GET['tag']);
+    }
+    if (not_blank('pagination')) {
+        $pagination = $_GET['pagination'] - 1;
+    }
 }
 
 // Initialise the blog
@@ -49,13 +49,13 @@ if (not_blank('post')) {
 $Blog = new Blog($post_slug, $page_slug, $pagination, $tag, $is_rss);
 
 if ($is_rss === true) {
-	$rss = $_GET['rss'];
-	include("includes/rss.php");
-	die();
+    $rss = $_GET['rss'];
+    include("includes/rss.php");
+    die();
 }
 if (not_blank('sitemap')) {
-	include("includes/sitemap.php");
-	die();
+    include("includes/sitemap.php");
+    die();
 }
 
 // Now run the theme

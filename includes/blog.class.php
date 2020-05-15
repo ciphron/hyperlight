@@ -4,143 +4,112 @@ if (!defined("HYPERLIGHT_INIT")) die();
 class NotFoundException extends Exception {}
 
 abstract class Url {
-	const Archive = 0;
-	const Post = 1;
-	const Page = 2;
-	const Error404 = 3;
+    const Archive = 0;
+    const Post = 1;
+    const Page = 2;
+    const Update = 3;
+    const Error404 = 4;
 }
 
 class Blog {
-	public $posts;
-	public $pages;
-	public $url;
+    public $posts;
+    public $url;
 
-	private $_page_num;
-	private $_page_num_total;
+    private $_page_num;
+    private $_page_num_total;
 
-	function __construct($post_slug, $page_slug, $pagination, $tag_slug, $is_rss) {
+    function __construct($post_slug, $page_slug, $pagination, $tag_slug) {
+        $this->_page_num = 0;
+        $this->_page_num_total = 1;
 
-		$this->pages = Blog::loadPages();
+        if ($post_slug !== "") {
+            try {
+                $this->posts = [new Post($post_slug, "")];
+                $this->url = Url::Post;
+            } catch (NotFoundException $e) {
+                Header("HTTP/1.1 404 Not Found");
+                $this->url = Url::Error404;
+            }
+        } else {
+            $this->posts = Blog::loadPosts($tag_slug);
 
-		$this->_page_num = 0;
-		$this->_page_num_total = 1;
+            // Pagination configuration
+            $this->_page_num = $pagination;
+            $offset = Config::PostsPerPage * $this->_page_num;
+            $length = Config::PostsPerPage;
+            $this->_page_num_total = ceil(count($this->posts) / $length);
 
-		if ($post_slug !== "") {
-			try {
-				$this->posts = [new Post($post_slug, "")];
-				$this->url = Url::Post;
-			} catch (NotFoundException $e) {
-				Header("HTTP/1.1 404 Not Found");
-				$this->url = Url::Error404;
-			}
-		} else if ($page_slug !== "") {
-			try {
-				$this->posts = [new Page($page_slug)];
-				$this->url = Url::Page;
-			} catch (NotFoundException $e) {
-				Header("HTTP/1.1 404 Not Found");
-				$this->url = Url::Error404;
-			}
-		} else {
-			$this->posts = Blog::loadPosts($tag_slug);
+            // Only return the posts that appear on that page.
+            $this->posts = array_slice($this->posts, $offset, $length);
+            $this->url = Url::Archive;
+        }
+    }
 
-			// Pagination configuration
-			$this->_page_num = $pagination;
-			$offset = Config::PostsPerPage * $this->_page_num;
-			$length = Config::PostsPerPage;
-			$this->_page_num_total = ceil(count($this->posts) / $length);
+    private function loadPosts($tag) {
+        $files = scandir(Config::PostsDirectory);
+        $files = array_splice($files, 2);
 
-			// Only return the posts that appear on that page, if
-			// displaying the archive page.
-			if ($is_rss !== true) {
-				$this->posts = array_slice($this->posts, $offset, $length);
-			}
-			$this->url = Url::Archive;
-		}
-	}
+        $posts = [];
 
-	private function loadPosts($tag) {
-		$files = scandir(Config::PostsDirectory);
-		$files = array_splice($files, 2);
+        foreach ($files as $file) {
+            try {
+                $stem = rtrim($file, '.md');
+                if (!preg_match('/[^#]+#.*/', $stem)) {
+                   $posts[] = new Post($stem, $tag);
+                }
+            } catch (NotFoundException $e) {
+            
+            }
+        }
 
-		$posts = [];
+        // Sort the posts before manipulating and displaying them
+        usort($posts, function ($a, $b) {
+            return ($a->timestamp > $b->timestamp) ? -1 : 1;
+        });
 
-		foreach ($files as $file) {
-			try {
-				$posts[] = new Post(rtrim($file, '.md'), $tag);
-			} catch (NotFoundException $e) {
-				// Do nothing, don't add it to the array.
-			}
-		}
+        return $posts;
+    }
 
-		// Sort the posts before manipulating and displaying them
-		usort($posts, function ($a, $b) {
-			return ($a->timestamp > $b->timestamp) ? -1 : 1;
-		});
 
-		return $posts;
-	}
+    // Returns the title, depending on whether you're on a single post or not.
+    public function get_title() {
+        $str = "";
+        if ($this->url === Url::Post) {
+            $str .= $this->posts[0]->title . Config::TitleSeparator;
+        }
+        $str .= Config::Title;
 
-	private function loadPages() {
-		$files = scandir(Config::PagesDirectory);
-		$files = array_splice($files, 2);
+        return $str;
+    }
 
-		$pages = [];
+    /*
+        PAGINATION FUNCTIONS
+    */
+    public function get_page_num() {
+        return $this->_page_num + 1;
+    }
 
-		foreach ($files as $file) {
-			try {
-				$pages[] = new Page(rtrim($file, '.md'));
-			} catch (NotFoundException $e) {
-				// Do nothing, don't add it to the array.
-			}
-		}
+    public function get_page_prev() {
+        return get_page_url() . "p/" . $this->_page_num;
+    }
 
-		usort($pages, function($a, $b) {
-			return strnatcmp($a->slug, $b->slug);
-		});
+    public function get_page_next() {
+        return get_page_url() . "p/" . ($this->_page_num + 2);
+    }
 
-		return $pages;
-	}
+    public function has_page_prev() {
+        return ($this->_page_num === 0) ? false : true;
+    }
 
-	// Returns the title, depending on whether you're on a single post or not.
-	public function get_title() {
-		$str = "";
-		if ($this->url === Url::Post || $this->url === Url::Page) {
-			$str .= $this->posts[0]->title . Config::TitleSeparator;
-		}
-		$str .= Config::Title;
+    public function has_page_next() {
+        return ($this->_page_num >= $this->_page_num_total - 1) ? false : true;
+    }
 
-		return $str;
-	}
+    public function has_pagination() {
+        return ($this->url === Url::Archive && ($this->has_page_next() || $this->has_page_prev())) ? true : false;
+    }
 
-	/*
-		PAGINATION FUNCTIONS
-	*/
-	public function get_page_num() {
-		return $this->_page_num + 1;
-	}
-
-	public function get_page_prev() {
-		return get_page_url() . "p/" . $this->_page_num;
-	}
-
-	public function get_page_next() {
-		return get_page_url() . "p/" . ($this->_page_num + 2);
-	}
-
-	public function has_page_prev() {
-		return ($this->_page_num === 0) ? false : true;
-	}
-
-	public function has_page_next() {
-		return ($this->_page_num >= $this->_page_num_total - 1) ? false : true;
-	}
-
-	public function has_pagination() {
-		return ($this->url === Url::Archive && ($this->has_page_next() || $this->has_page_prev())) ? true : false;
-	}
-
-	public function get_page_total() {
-		return $this->_page_num_total;
-	}
+    public function get_page_total() {
+        return $this->_page_num_total;
+    }
 }

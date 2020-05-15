@@ -1,7 +1,7 @@
 Example Post
 This post is an example.
 
-summary, guide
+example
 -----
 
 Hello, world!
